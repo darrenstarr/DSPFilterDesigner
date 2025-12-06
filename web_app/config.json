@@ -1,0 +1,40 @@
+{
+  "app": {
+    "title": "Digital Signal Processing - Filter Design Tool",
+    "version": "1.0.0",
+    "description": "Interactive learning tool for IIR and FIR bandpass filter design"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 5000,
+    "debug": true
+  },
+  "audio": {
+    "filename": "sunflower-street-drumloop-85bpm-163900 (1).mp3",
+    "mono": true,
+    "downsample_factor": 100
+  },
+  "fir": {
+    "window": "hamming",
+    "min_taps": 11,
+    "max_taps": 201,
+    "default_taps": 51
+  },
+  "iir": {
+    "type": "butterworth",
+    "min_order": 1,
+    "max_order": 8,
+    "default_order": 4
+  },
+  "frequency": {
+    "min_hz": 1,
+    "max_hz": 20000,
+    "default_low": 100,
+    "default_high": 2000
+  },
+  "visualization": {
+    "fft_size": 4096,
+    "freq_divisions": 5,
+    "time_divisions": 5
+  }
+}
