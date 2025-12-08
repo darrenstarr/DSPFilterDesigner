@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Digital Signal Processing - Filter Design Tool</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="static/css/style.css">
 </head>
 <body>
     <div class="container">
@@ -170,9 +170,13 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/visualization.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/filter-designer.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <!-- Signal Processor Library -->
+    <script src="static/js/signal-processor.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="static/js/utils.js"></script>
+    <script src="static/js/visualization.js"></script>
+    <script src="static/js/filter-designer.js"></script>
+    <script src="static/js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integration Test - DSP Filter Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .test-results {
+            margin-top: 20px;
+        }
+        
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        
+        .test-result.passed {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+        
+        .test-result.failed {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+        }
+        
+        .test-result.running {
+            background-color: #fff3cd;
+            border-color: #ffc107;
+        }
+        
+        .test-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .test-message {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .summary {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .summary.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .summary.failure {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .log-output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+        }
+        
+        .log-entry.info {
+            color: #004085;
+        }
+        
+        .log-entry.success {
+            color: #155724;
+        }
+        
+        .log-entry.error {
+            color: #721c24;
+        }
+        
+        .hidden-frame {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Integration Test - DSP Filter Tool</h1>
+        
+        <div class="controls">
+            <button id="run-tests-btn" onclick="runIntegrationTests()">Run Integration Tests</button>
+            <button id="clear-results-btn" onclick="clearResults()" disabled>Clear Results</button>
+        </div>
+        
+        <div class="progress">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        
+        <div class="test-results" id="test-results"></div>
+        
+        <div class="summary" id="test-summary" style="display: none;"></div>
+        
+        <div class="log-output" id="log-output"></div>
+    </div>
+
+    <!-- Hidden iframe to load the application -->
+    <iframe id="app-frame" class="hidden-frame" src="../index.html"></iframe>
+
+    <script>
+        let testResults = [];
+        let logEntries = [];
+        let testFrame = null;
+        let appWindow = null;
+        
+        /**
+         * Add log entry
+         */
+        function addLogEntry(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `[${timestamp}] ${message}`;
+            logEntries.push({ entry, type });
+            
+            const logOutput = document.getElementById('log-output');
+            const logDiv = document.createElement('div');
+            logDiv.className = `log-entry ${type}`;
+            logDiv.textContent = entry;
+            logOutput.appendChild(logDiv);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+        
+        /**
+         * Run integration tests
+         */
+        async function runIntegrationTests() {
+            const runBtn = document.getElementById('run-tests-btn');
+            const clearBtn = document.getElementById('clear-results-btn');
+            const progressBar = document.getElementById('progress-bar');
+            const resultsDiv = document.getElementById('test-results');
+            const summaryDiv = document.getElementById('test-summary');
+            
+            // Reset UI
+            runBtn.disabled = true;
+            clearBtn.disabled = true;
+            progressBar.style.width = '0%';
+            resultsDiv.innerHTML = '';
+            summaryDiv.style.display = 'none';
+            logEntries = [];
+            document.getElementById('log-output').innerHTML = '';
+            
+            addLogEntry('Starting integration tests...', 'info');
+            
+            try {
+                // Load the application in iframe
+                testFrame = document.getElementById('app-frame');
+                testFrame.style.display = 'block';
+                
+                // Wait for iframe to load
+                await new Promise((resolve, reject) => {
+                    testFrame.onload = resolve;
+                    testFrame.onerror = reject;
+                });
+                
+                appWindow = testFrame.contentWindow;
+                
+                // Wait for application to initialize
+                await waitForAppInitialization();
+                
+                // Run tests
+                await testAudioLoading();
+                await testFIRFilterDesign();
+                await testIIRFilterDesign();
+                await testFilterApplication();
+                await testAudioExport();
+                
+                // Update progress
+                progressBar.style.width = '100%';
+                
+                // Show summary
+                showTestSummary();
+                
+                addLogEntry('Integration tests completed successfully', 'success');
+            } catch (error) {
+                addLogEntry(`Integration test execution failed: ${error.message}`, 'error');
+                console.error('Integration test execution error:', error);
+            } finally {
+                runBtn.disabled = false;
+                clearBtn.disabled = false;
+                if (testFrame) {
+                    testFrame.style.display = 'none';
+                }
+            }
+        }
+        
+        /**
+         * Wait for application to initialize
+         */
+        function waitForAppInitialization() {
+            return new Promise((resolve, reject) => {
+                const maxAttempts = 50;
+                let attempts = 0;
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    
+                    try {
+                        if (appWindow && appWindow.app && appWindow.filterDesigner && appWindow.visualization) {
+                            clearInterval(checkInterval);
+                            addLogEntry('Application initialized successfully', 'success');
+                            resolve();
+                        } else if (attempts >= maxAttempts) {
+                            clearInterval(checkInterval);
+                            reject(new Error('Application initialization timeout'));
+                        }
+                    } catch (error) {
+                        if (attempts >= maxAttempts) {
+                            clearInterval(checkInterval);
+                            reject(new Error('Failed to access application: ' + error.message));
+                        }
+                    }
+                }, 200);
+            });
+        }
+        
+        /**
+         * Test audio loading
+         */
+        async function testAudioLoading() {
+            addLogEntry('Testing audio loading...', 'info');
+            
+            try {
+                // Check if audio info is loaded
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                const audioInfo = appWindow.filterDesigner.audioInfo;
+                assert(audioInfo !== null, 'Audio info should be loaded');
+                assert(audioInfo.sampleRate > 0, 'Sample rate should be positive');
+                assert(audioInfo.duration > 0, 'Duration should be positive');
+                assert(audioInfo.samples > 0, 'Sample count should be positive');
+                
+                addTestResult('Audio Loading', true, 'Audio loaded successfully');
+                addLogEntry('✓ Audio loading test passed', 'success');
+            } catch (error) {
+                addTestResult('Audio Loading', false, error.message);
+                addLogEntry(`✗ Audio loading test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Test FIR filter design
+         */
+        async function testFIRFilterDesign() {
+            addLogEntry('Testing FIR filter design...', 'info');
+            
+            try {
+                // Design FIR filter
+                const result = await appWindow.filterDesigner.designFIR(100, 1000, 51);
+                
+                assert(result !== null, 'FIR design result should not be null');
+                assert(result.coefficients !== null, 'FIR coefficients should not be null');
+                assert(result.frequencies !== null, 'FIR frequencies should not be null');
+                assert(result.magnitude_db !== null, 'FIR magnitude should not be null');
+                assert(result.coefficients.length === 51, 'Should have 51 coefficients');
+                
+                // Check that coefficients are stored
+                assert(appWindow.filterDesigner.firCoefficients !== null, 'FIR coefficients should be stored');
+                assert(appWindow.filterDesigner.firFrequencies !== null, 'FIR frequencies should be stored');
+                
+                addTestResult('FIR Filter Design', true, 'FIR filter designed successfully');
+                addLogEntry('✓ FIR filter design test passed', 'success');
+            } catch (error) {
+                addTestResult('FIR Filter Design', false, error.message);
+                addLogEntry(`✗ FIR filter design test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Test IIR filter design
+         */
+        async function testIIRFilterDesign() {
+            addLogEntry('Testing IIR filter design...', 'info');
+            
+            try {
+                // Design IIR filter
+                const result = await appWindow.filterDesigner.designIIR(100, 1000, 4);
+                
+                assert(result !== null, 'IIR design result should not be null');
+                assert(result.b !== null, 'IIR numerator coefficients should not be null');
+                assert(result.a !== null, 'IIR denominator coefficients should not be null');
+                assert(result.frequencies !== null, 'IIR frequencies should not be null');
+                assert(result.magnitude_db !== null, 'IIR magnitude should not be null');
+                
+                // Check that coefficients are stored
+                assert(appWindow.filterDesigner.iirB !== null, 'IIR B coefficients should be stored');
+                assert(appWindow.filterDesigner.iirA !== null, 'IIR A coefficients should be stored');
+                
+                addTestResult('IIR Filter Design', true, 'IIR filter designed successfully');
+                addLogEntry('✓ IIR filter design test passed', 'success');
+            } catch (error) {
+                addTestResult('IIR Filter Design', false, error.message);
+                addLogEntry(`✗ IIR filter design test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Test filter application
+         */
+        async function testFilterApplication() {
+            addLogEntry('Testing filter application...', 'info');
+            
+            try {
+                // Design filters first
+                await appWindow.filterDesigner.designFIR(100, 1000, 51);
+                await appWindow.filterDesigner.designIIR(100, 1000, 4);
+                
+                // Apply filters
+                await appWindow.filterDesigner.applyFilters();
+                
+                // Check that filtered signals are stored
+                assert(appWindow.filterDesigner.firFiltered !== null, 'FIR filtered signal should be stored');
+                assert(appWindow.filterDesigner.iirFiltered !== null, 'IIR filtered signal should be stored');
+                
+                // Check that filtered signals have data
+                assert(appWindow.filterDesigner.firFiltered.amplitude.length > 0, 'FIR filtered signal should have amplitude data');
+                assert(appWindow.filterDesigner.iirFiltered.amplitude.length > 0, 'IIR filtered signal should have amplitude data');
+                
+                addTestResult('Filter Application', true, 'Filters applied successfully');
+                addLogEntry('✓ Filter application test passed', 'success');
+            } catch (error) {
+                addTestResult('Filter Application', false, error.message);
+                addLogEntry(`✗ Filter application test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Test audio export
+         */
+        async function testAudioExport() {
+            addLogEntry('Testing audio export...', 'info');
+            
+            try {
+                // Design filters first
+                await appWindow.filterDesigner.designFIR(100, 1000, 51);
+                await appWindow.filterDesigner.designIIR(100, 1000, 4);
+                
+                // Test original audio export
+                const originalBlob = await appWindow.filterDesigner.exportAudio('original');
+                assert(originalBlob instanceof Blob, 'Original export should return Blob');
+                assert(originalBlob.type === 'audio/wav', 'Original export should be WAV format');
+                
+                // Test FIR filter export
+                const firBlob = await appWindow.filterDesigner.exportAudio('fir');
+                assert(firBlob instanceof Blob, 'FIR export should return Blob');
+                assert(firBlob.type === 'audio/wav', 'FIR export should be WAV format');
+                
+                // Test IIR filter export
+                const iirBlob = await appWindow.filterDesigner.exportAudio('iir');
+                assert(iirBlob instanceof Blob, 'IIR export should return Blob');
+                assert(iirBlob.type === 'audio/wav', 'IIR export should be WAV format');
+                
+                addTestResult('Audio Export', true, 'Audio export works correctly');
+                addLogEntry('✓ Audio export test passed', 'success');
+            } catch (error) {
+                addTestResult('Audio Export', false, error.message);
+                addLogEntry(`✗ Audio export test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Simple assertion helper
+         */
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message);
+            }
+        }
+        
+        /**
+         * Add test result
+         */
+        function addTestResult(testName, passed, message) {
+            testResults.push({
+                name: testName,
+                passed: passed,
+                message: message,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        /**
+         * Show test summary
+         */
+        function showTestSummary() {
+            const summaryDiv = document.getElementById('test-summary');
+            const passedTests = testResults.filter(r => r.passed).length;
+            const totalTests = testResults.length;
+            const failedTests = totalTests - passedTests;
+            
+            summaryDiv.className = `summary ${failedTests === 0 ? 'success' : 'failure'}`;
+            summaryDiv.innerHTML = `
+                <h3>Integration Test Summary</h3>
+                <p>Total Tests: ${totalTests}</p>
+                <p>Passed: <strong style="color: ${passedTests === totalTests ? '#28a745' : '#007bff'}">${passedTests}</strong></p>
+                <p>Failed: <strong style="color: ${failedTests > 0 ? '#dc3545' : '#28a745'}">${failedTests}</strong></p>
+                <p>Success Rate: <strong>${((passedTests / totalTests) * 100).toFixed(1)}%</strong></p>
+            `;
+            summaryDiv.style.display = 'block';
+        }
+        
+        /**
+         * Display test results
+         */
+        function displayTestResults() {
+            const resultsDiv = document.getElementById('test-results');
+            
+            testResults.forEach((result, index) => {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `test-result ${result.passed ? 'passed' : 'failed'}`;
+                
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'test-name';
+                nameDiv.textContent = `${index + 1}. ${result.name}`;
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'test-message';
+                messageDiv.textContent = result.message;
+                
+                resultDiv.appendChild(nameDiv);
+                resultDiv.appendChild(messageDiv);
+                resultsDiv.appendChild(resultDiv);
+            });
+        }
+        
+        /**
+         * Clear results
+         */
+        function clearResults() {
+            const resultsDiv = document.getElementById('test-results');
+            const summaryDiv = document.getElementById('test-summary');
+            const progressBar = document.getElementById('progress-bar');
+            const logOutput = document.getElementById('log-output');
+            
+            resultsDiv.innerHTML = '';
+            summaryDiv.style.display = 'none';
+            progressBar.style.width = '0%';
+            logOutput.innerHTML = '';
+            logEntries = [];
+            testResults = [];
+            
+            addLogEntry('Results cleared', 'info');
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            addLogEntry('Integration test runner initialized', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -462,48 +462,126 @@ class Visualization {
             return;
         }
 
-        // Fetch spectrum from backend
-        console.log(`[drawSpectrum] Fetching spectrum...`);
-        this.fetchSpectrum(signalType, sampleRate).then(spectrumData => {
-            console.log(`[drawSpectrum] Received spectrum data:`, spectrumData);
+        // Calculate spectrum using client-side processing
+        console.log(`[drawSpectrum] Calculating spectrum...`);
+        try {
+            const spectrumData = this.calculateSpectrum(signal, sampleRate);
+            console.log(`[drawSpectrum] Calculated spectrum data:`, spectrumData);
             this.drawSpectrumData(canvasId, spectrumData, color, sampleRate);
             console.log(`[drawSpectrum] Spectrum drawn`);
-        }).catch(error => {
-            console.error('Error fetching spectrum:', error);
-        });
+        } catch (error) {
+            console.error('Error calculating spectrum:', error);
+        }
     }
 
     /**
-     * Fetch spectrum data from backend
+     * Calculate spectrum data using client-side processing
      */
-    async fetchSpectrum(signalType, sampleRate) {
+    calculateSpectrum(signal, sampleRate) {
         try {
-            console.log(`[fetchSpectrum] Fetching spectrum for signal type: ${signalType}`);
+            // Convert signal to Float64Array if it's not already
+            const signalArray = signal instanceof Float64Array ? signal : new Float64Array(signal);
             
-            const response = await fetch('/api/spectrum', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    type: signalType,
-                    freq_range: [0, sampleRate / 2]
-                })
-            });
+            // Calculate FFT
+            const nFFT = Math.pow(2, Math.ceil(Math.log2(signalArray.length)));
+            const paddedSignal = new Float64Array(nFFT);
+            paddedSignal.set(signalArray.slice(0, nFFT));
             
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`[fetchSpectrum] HTTP ${response.status}: ${errorText}`);
-                return { frequencies: [], magnitude_db: [] };
+            // Use SignalProcessor's FFT if available, otherwise use simple implementation
+            let spectrum;
+            if (typeof SignalProcessor !== 'undefined') {
+                const tempProcessor = new SignalProcessor({
+                    sampleRate: sampleRate,
+                    duration: signalArray.length / sampleRate,
+                    getChannelData: () => signalArray
+                });
+                spectrum = tempProcessor.fft(paddedSignal);
+            } else {
+                // Fallback to simple FFT implementation
+                spectrum = this.simpleFFT(paddedSignal);
             }
             
-            const data = await response.json();
-            console.log(`[fetchSpectrum] Response received:`, data);
-            return data;
+            // Get positive frequencies only
+            const positiveFreqs = this.fftfreq(nFFT, 1/sampleRate).slice(0, nFFT/2);
+            const positiveSpectrum = spectrum.slice(0, nFFT/2);
+            
+            // Convert to dB
+            const magnitudeDb = positiveSpectrum.map(complex => {
+                const magnitude = Math.sqrt(complex.real * complex.real + complex.imag * complex.imag);
+                return 20 * Math.log10(magnitude + 1e-10);
+            });
+            
+            return {
+                frequencies: positiveFreqs,
+                magnitude_db: magnitudeDb
+            };
         } catch (error) {
-            console.error('Error fetching spectrum:', error);
+            console.error('Error in calculateSpectrum:', error);
             return { frequencies: [], magnitude_db: [] };
         }
+    }
+
+    /**
+     * Simple FFT implementation (fallback)
+     */
+    simpleFFT(x) {
+        const N = x.length;
+        if (N <= 1) {
+            return x.map(val => ({ real: val, imag: 0 }));
+        }
+        
+        // Divide
+        const even = new Float64Array(N / 2);
+        const odd = new Float64Array(N / 2);
+        
+        for (let i = 0; i < N / 2; i++) {
+            even[i] = x[2 * i];
+            odd[i] = x[2 * i + 1];
+        }
+        
+        // Conquer
+        const evenFFT = this.simpleFFT(even);
+        const oddFFT = this.simpleFFT(odd);
+        
+        // Combine
+        const result = new Array(N);
+        
+        for (let k = 0; k < N / 2; k++) {
+            const t = {
+                real: oddFFT[k].real * Math.cos(-2 * Math.PI * k / N) - oddFFT[k].imag * Math.sin(-2 * Math.PI * k / N),
+                imag: oddFFT[k].real * Math.sin(-2 * Math.PI * k / N) + oddFFT[k].imag * Math.cos(-2 * Math.PI * k / N)
+            };
+            
+            result[k] = {
+                real: evenFFT[k].real + t.real,
+                imag: evenFFT[k].imag + t.imag
+            };
+            result[k + N / 2] = {
+                real: evenFFT[k].real - t.real,
+                imag: evenFFT[k].imag - t.imag
+            };
+        }
+        
+        return result;
+    }
+
+    /**
+     * Get frequency bins for FFT
+     */
+    fftfreq(n, d = 1.0) {
+        const results = new Float64Array(n);
+        const positiveFreqs = Math.floor(n / 2);
+        const negativeFreqs = n - positiveFreqs;
+        
+        for (let i = 0; i < positiveFreqs; i++) {
+            results[i] = i / (n * d);
+        }
+        
+        for (let i = positiveFreqs; i < n; i++) {
+            results[i] = -(negativeFreqs - i) / (n * d);
+        }
+        
+        return results;
     }
 
     /**
