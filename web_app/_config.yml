@@ -1,0 +1,39 @@
+# GitHub Pages Configuration
+
+title: DSP Filter Tool
+description: A client-side digital signal processing filter design tool
+author: DSP Tool Team
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "" # the base hostname & protocol for your site, e.g. https://github.com/yourusername/your-repo
+
+# Build settings
+markdown: kramdown
+theme: minima
+
+# Exclude from processing
+exclude:
+  - README.md
+  - README-GITHUB-PAGES.md
+  - app.py
+  - requirements.txt
+  - flask.log
+  - run_app.bat
+  - run.bat
+  - run.ps1
+  - .gitignore
+  - .git
+  - _config.yml
+  - config.json
+  - mypy_cache
+
+# Include specific files
+include:
+  - _pages
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+
+# SEO
+google_analytics: # Add your Google Analytics ID if needed
